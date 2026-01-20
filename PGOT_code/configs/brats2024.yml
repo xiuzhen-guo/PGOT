@@ -1,0 +1,11 @@
+OT:
+  gene_source: False
+  h_name: "./code/ot_utils/ot_brats2024"
+  backSteps: 10
+  max_iter: 1000
+  lr_ot: 0.1
+  num_sr: 20000
+  bat_size_sr: 20000
+  bat_size_tg: 10000
+  topk: 10#0
+  angle_thresh: 0.7
