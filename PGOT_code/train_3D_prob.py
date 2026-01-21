@@ -292,6 +292,14 @@ def train(args, snapshot_path):
                 feature3d = outputs['feature3d']
                 cls_seg_3d = outputs["cls_seg_3d"]
                 
+                # update the prototypes
+                if iter_num % args.proto_update_interval ==0:              
+                    labeled_label = label_batch_l.long()
+                    label_onehot = torch.nn.functional.one_hot(labeled_label, num_classes=args.num_classes)                    
+                    mask_p = label_onehot.permute(4, 0, 1, 2, 3).contiguous().float()
+                    confidence_p = torch.ones_like(mask_p, dtype=torch.float, device=mask_p.device)                    
+                    proportion = s_model.prototype_update(feature3d, label_batch_l, args.num_classes, mask_p, confidence_p)  
+                
                 # sdot optimization
                 if iter_num == args.linearIter+1 or iter_num % args.sdot_update_interval==0:
                     select_ft, select_pos = select_features(feature3d)
@@ -300,13 +308,6 @@ def train(args, snapshot_path):
                     sdot_h = s_model.sdot_map(Config['OT'], proto_mu, proto_sigma, select_ft, 1, self_snapshot_path)
                     
                 proto_prob, proto_labels = compute_probability(Config['OT'], proto_mu, proto_sigma, feature3d)
-                # update the prototypes
-                if iter_num % args.proto_update_interval ==0:              
-                    labeled_label = label_batch_l.long()
-                    label_onehot = torch.nn.functional.one_hot(labeled_label, num_classes=args.num_classes)                    
-                    mask_p = label_onehot.permute(4, 0, 1, 2, 3).contiguous().float()
-                    confidence_p = torch.ones_like(mask_p, dtype=torch.float, device=mask_p.device)                    
-                    proportion = s_model.prototype_update(feature3d, label_batch_l, args.num_classes, mask_p, confidence_p)  
                 
                 loss_cls_ce, loss_seg_dice = mix_loss(cls_seg_3d, label_batch_l)
                 loss_cls_3d = args.ce_w * loss_cls_ce + args.dice_w * loss_seg_dice
@@ -337,14 +338,6 @@ def train(args, snapshot_path):
                 cls_seg_3d = outputs["cls_seg_3d"]
                 feature3d = outputs['feature3d']
 
-                # sdot optimization
-                if iter_num % args.sdot_update_interval==0:
-                    select_ft, select_pos = select_features(feature3d)
-                    proto_pseudo_list = []
-                    proto_weights_list = []
-                    sdot_h = s_model.sdot_map(Config['OT'], proto_mu, proto_sigma, select_ft, 1, self_snapshot_path)                
-                proto_prob, proto_labels = compute_probability(Config['OT'], proto_mu, proto_sigma, feature3d)
-                
                 # update the prototypes
                 if iter_num % args.proto_update_interval ==0:
                     # labeled feature selection
@@ -357,6 +350,14 @@ def train(args, snapshot_path):
                     mask_p = torch.cat([mask_p_l, mask_p_u], dim=1)
                     confidence_p = torch.cat([confidence_p_l, confidence_p_u], dim=1)
                     proportion = s_model.prototype_update(feature3d, label_batch, args.num_classes, mask_p, confidence_p)
+                
+                # sdot optimization
+                if iter_num % args.sdot_update_interval==0:
+                    select_ft, select_pos = select_features(feature3d)
+                    proto_pseudo_list = []
+                    proto_weights_list = []
+                    sdot_h = s_model.sdot_map(Config['OT'], proto_mu, proto_sigma, select_ft, 1, self_snapshot_path)                
+                proto_prob, proto_labels = compute_probability(Config['OT'], proto_mu, proto_sigma, feature3d)
                 
                 # supervised loss
                 loss_proto_ce, loss_proto_dice = mix_loss(proto_prob[:args.labeled_bs], label_batch_l)
@@ -451,5 +452,6 @@ if __name__ == "__main__":
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
     train(args, self_snapshot_path)
+
 
 
